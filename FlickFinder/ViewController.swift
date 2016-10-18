@@ -3,6 +3,7 @@
 //  FlickFinder
 //
 //  Created by Jarrod Parkes on 11/5/15.
+//  Edited and modified by Ali Mir on 10/18/16.
 //  Copyright © 2015 Udacity. All rights reserved.
 //
 
