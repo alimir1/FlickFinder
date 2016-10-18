@@ -34,7 +34,6 @@ class ViewController: UIViewController {
         phraseTextField.delegate = self
         latitudeTextField.delegate = self
         longitudeTextField.delegate = self
-        // FIX: As of Swift 2.2, using strings for selectors has been deprecated. Instead, #selector(methodName) should be used.
         subscribeToNotification(UIKeyboardWillShowNotification, selector: #selector(keyboardWillShow))
         subscribeToNotification(UIKeyboardWillHideNotification, selector: #selector(keyboardWillHide))
         subscribeToNotification(UIKeyboardDidShowNotification, selector: #selector(keyboardDidShow))
@@ -73,7 +72,6 @@ class ViewController: UIViewController {
     }
     
     @IBAction func searchByLatLon(sender: AnyObject) {
-
         userDidTapView(self)
         setUIEnabled(false)
         
@@ -113,10 +111,53 @@ class ViewController: UIViewController {
     // MARK: Flickr API
     
     private func displayImageFromFlickrBySearch(methodParameters: [String:AnyObject]) {
+        let session = NSURLSession.sharedSession()
+        let request = NSURLRequest(URL: flickrURLFromParameters(methodParameters))
         
-        print(flickrURLFromParameters(methodParameters))
+        let task = session.dataTaskWithRequest(request) {
+            (data, response, error) in
+            
+            func displayError(error: String) {
+                print(error)
+                performUIUpdatesOnMain {
+                    self.setUIEnabled(true)
+                    self.photoTitleLabel.text = "No photo returned. Try again."
+                    self.photoImageView.image = nil
+                }
+            }
+            
+            // GUARD: Check error
+            guard (error == nil) else {
+                displayError(error!.localizedDescription)
+                return
+            }
+            
+            // GUARD: Check if successful 2xx response
+            guard let statusCode = (response as? NSHTTPURLResponse)?.statusCode where statusCode >= 200 && statusCode <= 299 else {
+                displayError("No data was returned by the request!")
+                return
+            }
+            
+            // GUARD: Check if data was returned
+            guard let rawData = data else {
+                displayError("Data was not successfully returned!")
+                return
+            }
+            
+            let parsedResult: AnyObject!
+            do {
+                parsedResult = try NSJSONSerialization.JSONObjectWithData(rawData, options: .AllowFragments)
+            } catch {
+                displayError("Could not parse data as JSON: \(rawData)")
+                return
+            }
+            
+            
+            
+        }
         
-        // TODO: Make request to Flickr!
+        task.resume()
+        
     }
     
     // MARK: Helper for Creating a URL from Parameters
