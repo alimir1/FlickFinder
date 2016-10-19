@@ -110,37 +110,39 @@ class ViewController: UIViewController {
     
     // MARK: Flickr API
     
-    private func displayImageFromFlickrBySearch(methodParameters: [String:AnyObject]) {
+    func displayError(error: String) {
+        print(error)
+        performUIUpdatesOnMain {
+            self.setUIEnabled(true)
+            self.photoTitleLabel.text = "No photo returned. Try again."
+            self.photoImageView.image = nil
+        }
+    }
+    
+    private func displayImageFromFlickrBySearch(methodParameters: [String:AnyObject], withPageNumber: Int) {
+        // create session and request
         let session = NSURLSession.sharedSession()
+        var methodParameters = methodParameters
+        methodParameters[Constants.FlickrParameterKeys.Page] = "\(withPageNumber)"
         let request = NSURLRequest(URL: flickrURLFromParameters(methodParameters))
         
         let task = session.dataTaskWithRequest(request) {
             (data, response, error) in
-            
-            func displayError(error: String) {
-                print(error)
-                performUIUpdatesOnMain {
-                    self.setUIEnabled(true)
-                    self.photoTitleLabel.text = "No photo returned. Try again."
-                    self.photoImageView.image = nil
-                }
-            }
-            
             // GUARD: Check error
             guard (error == nil) else {
-                displayError(error!.localizedDescription)
+                self.displayError(error!.localizedDescription)
                 return
             }
             
             // GUARD: Check if successful 2xx response
             guard let statusCode = (response as? NSHTTPURLResponse)?.statusCode where statusCode >= 200 && statusCode <= 299 else {
-                displayError("No data was returned by the request!")
+                self.displayError("No data was returned by the request!")
                 return
             }
             
             // GUARD: Check if data was returned
             guard let rawData = data else {
-                displayError("Data was not successfully returned!")
+                self.displayError("Data was not successfully returned!")
                 return
             }
             
@@ -148,30 +150,30 @@ class ViewController: UIViewController {
             do {
                 parsedResult = try NSJSONSerialization.JSONObjectWithData(rawData, options: .AllowFragments)
             } catch {
-                displayError("Could not parse data as JSON: \(rawData)")
+                self.displayError("Could not parse data as JSON: \(rawData)")
                 return
             }
             
             // GUARD: Check if Flickr returned an error (stat != ok)
             guard let stat = parsedResult[Constants.FlickrResponseKeys.Status] as? String where stat == Constants.FlickrResponseValues.OKStatus else {
-                displayError("Flickr status error. Check following: \(parsedResult)")
+                self.displayError("Flickr status error. Check following: \(parsedResult)")
                 return
             }
             
-            // GUARD: Check to see if "Photos" exist in parsedResults
+            // GUARD: Check to see if "photos" exist in parsedResults
             guard let photosDictionary = parsedResult[Constants.FlickrResponseKeys.Photos] as? [String : AnyObject] else {
-                displayError("Could not find \(Constants.FlickrResponseKeys.Photos) in \(parsedResult)")
+                self.displayError("Could not find \(Constants.FlickrResponseKeys.Photos) in \(parsedResult)")
                 return
             }
             
-            // GUARD: Check to see if there are any photos in the photosDictionary
+            // GUARD: Check to see if "photo" exists in photosDictionary
             guard let photosArray = photosDictionary[Constants.FlickrResponseKeys.Photo] as? [[String : AnyObject]] else {
-                displayError("Could not find \(Constants.FlickrResponseKeys.Photo) in \(photosDictionary)")
+                self.displayError("Could not find \(Constants.FlickrResponseKeys.Photo) in \(photosDictionary)")
                 return
             }
             
             if photosArray.count < 1 {
-                displayError("No images found. Search again!")
+                self.displayError("No images found. Search again!")
                 return
             } else {
                 let randomPhotoIndex = Int(arc4random_uniform(UInt32(photosArray.count)))
@@ -180,7 +182,7 @@ class ViewController: UIViewController {
                 
                 // GUARD: Check if photo has "url_m" key
                 guard let imageURLString = randomPhotoDictionary[Constants.FlickrResponseKeys.MediumURL] as? String else {
-                    displayError("Cannot find image url. \(randomPhotoDictionary)")
+                    self.displayError("Cannot find image url. \(randomPhotoDictionary)")
                     return
                 }
                 
@@ -193,10 +195,70 @@ class ViewController: UIViewController {
                         self.setUIEnabled(true)
                     }
                 } else {
-                    displayError("Image does not exist at \(imageURL!)")
+                    self.displayError("Image does not exist at \(imageURL!)")
                     return
                 }
             }
+        }
+        
+        // Start task
+        task.resume()
+    }
+    
+    private func displayImageFromFlickrBySearch(methodParameters: [String:AnyObject]) {
+        let session = NSURLSession.sharedSession()
+        let request = NSURLRequest(URL: flickrURLFromParameters(methodParameters))
+        
+        let task = session.dataTaskWithRequest(request) {
+            (data, response, error) in
+            
+            // GUARD: Check error
+            guard (error == nil) else {
+                self.displayError(error!.localizedDescription)
+                return
+            }
+            
+            // GUARD: Check if successful 2xx response
+            guard let statusCode = (response as? NSHTTPURLResponse)?.statusCode where statusCode >= 200 && statusCode <= 299 else {
+                self.displayError("No data was returned by the request!")
+                return
+            }
+            
+            // GUARD: Check if data was returned
+            guard let rawData = data else {
+                self.displayError("Data was not successfully returned!")
+                return
+            }
+            
+            let parsedResult: AnyObject!
+            do {
+                parsedResult = try NSJSONSerialization.JSONObjectWithData(rawData, options: .AllowFragments)
+            } catch {
+                self.displayError("Could not parse data as JSON: \(rawData)")
+                return
+            }
+            
+            // GUARD: Check if Flickr returned an error (stat != ok)
+            guard let stat = parsedResult[Constants.FlickrResponseKeys.Status] as? String where stat == Constants.FlickrResponseValues.OKStatus else {
+                self.displayError("Flickr status error. Check following: \(parsedResult)")
+                return
+            }
+            
+            // GUARD: Check to see if "photos" exist in parsedResults
+            guard let photosDictionary = parsedResult[Constants.FlickrResponseKeys.Photos] as? [String : AnyObject] else {
+                self.displayError("Could not find \(Constants.FlickrResponseKeys.Photos) in \(parsedResult)")
+                return
+            }
+            
+            guard let totalPages = photosDictionary[Constants.FlickrResponseKeys.Pages] as? Int else {
+                self.displayError("Could not find \(Constants.FlickrResponseKeys.Pages) in \(photosDictionary)")
+                return
+            }
+            
+            // Pick a random page!
+            let pagesLimit = min(totalPages, 40)
+            let randomPageNumber = Int(arc4random_uniform(UInt32(pagesLimit))) + 1
+            self.displayImageFromFlickrBySearch(methodParameters, withPageNumber: randomPageNumber)
         }
         
         task.resume()
